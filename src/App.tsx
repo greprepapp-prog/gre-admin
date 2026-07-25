@@ -5,6 +5,7 @@ import { ExcelImporter } from './components/ExcelImporter'
 import { UserManagement } from './components/UserManagement/UserManagement'
 import { Dashboard } from './components/Dashboard/Dashboard'
 import { SupportInbox } from './components/SupportInbox/SupportInbox'
+import { OperationsPanel } from './components/Operations/OperationsPanel'
 
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
@@ -19,6 +20,7 @@ function App() {
           {tab === 'importer' && <ExcelImporter />}
           {tab === 'users' && <UserManagement />}
           {tab === 'support' && <SupportInbox />}
+          {tab === 'operations' && <OperationsPanel />}
         </main>
       </div>
     </AuthGate>

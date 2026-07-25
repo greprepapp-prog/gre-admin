@@ -2,7 +2,7 @@ import { LayoutDashboard, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/use-auth'
 
-export type Tab = 'dashboard' | 'importer' | 'users' | 'support'
+export type Tab = 'dashboard' | 'importer' | 'users' | 'support' | 'operations'
 
 interface Props {
   active: Tab
@@ -14,6 +14,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'importer', label: 'Content Importer' },
   { id: 'users', label: 'User Management' },
   { id: 'support', label: 'Support Inbox' },
+  { id: 'operations', label: 'Operations & Config' },
 ]
 
 export function Nav({ active, onChange }: Props) {
