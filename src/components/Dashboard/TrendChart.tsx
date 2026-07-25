@@ -10,10 +10,15 @@ interface Props {
 const RANGES: (7 | 30 | 90)[] = [7, 30, 90]
 
 export function TrendChart({ data, range, onRangeChange }: Props) {
-  const formatted = data.map((d) => ({
-    ...d,
-    label: new Date(d.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-  }))
+  const formatted = (data ?? []).map((d) => {
+    const parsed = d?.day ? new Date(d.day) : null
+    return {
+      day: d?.day ?? '',
+      registrations: d?.registrations ?? 0,
+      active_users: d?.active_users ?? 0,
+      label: parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—',
+    }
+  })
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">

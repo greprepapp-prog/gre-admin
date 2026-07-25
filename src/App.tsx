@@ -6,6 +6,7 @@ import { UserManagement } from './components/UserManagement/UserManagement'
 import { Dashboard } from './components/Dashboard/Dashboard'
 import { SupportInbox } from './components/SupportInbox/SupportInbox'
 import { OperationsPanel } from './components/Operations/OperationsPanel'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 function App() {
   const [tab, setTab] = useState<Tab>('dashboard')
@@ -16,11 +17,13 @@ function App() {
         <Nav active={tab} onChange={setTab} />
 
         <main className="mx-auto max-w-7xl px-6 py-8">
-          {tab === 'dashboard' && <Dashboard />}
-          {tab === 'importer' && <ExcelImporter />}
-          {tab === 'users' && <UserManagement />}
-          {tab === 'support' && <SupportInbox />}
-          {tab === 'operations' && <OperationsPanel />}
+          <ErrorBoundary key={tab}>
+            {tab === 'dashboard' && <Dashboard />}
+            {tab === 'importer' && <ExcelImporter />}
+            {tab === 'users' && <UserManagement />}
+            {tab === 'support' && <SupportInbox />}
+            {tab === 'operations' && <OperationsPanel />}
+          </ErrorBoundary>
         </main>
       </div>
     </AuthGate>

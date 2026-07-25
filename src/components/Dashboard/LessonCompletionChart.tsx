@@ -6,9 +6,13 @@ interface Props {
 }
 
 export function LessonCompletionChart({ data }: Props) {
-  const formatted = data.map((d) => ({
-    ...d,
-    label: `L${d.lesson_id}`,
+  const formatted = (data ?? []).map((d) => ({
+    lesson_id: d?.lesson_id ?? 0,
+    title: d?.title ?? `Lesson ${d?.lesson_id ?? '?'}`,
+    started_count: d?.started_count ?? 0,
+    completed_count: d?.completed_count ?? 0,
+    completion_rate: d?.completion_rate ?? 0,
+    label: `L${d?.lesson_id ?? '?'}`,
   }))
 
   return (

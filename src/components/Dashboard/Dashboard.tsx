@@ -98,14 +98,14 @@ export function Dashboard() {
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : (
-        stats && (
+        !loading && (
           <>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">User Growth</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <StatCard icon={UserPlus} label="Total Registrations" value={stats.total_registrations.toLocaleString()} />
-                <StatCard icon={Users} label="Daily Active Users" value={stats.dau.toLocaleString()} hint="signed in within 24h" />
-                <StatCard icon={UserCheck} label="Monthly Active Users" value={stats.mau.toLocaleString()} hint="signed in within 30d" />
+                <StatCard icon={UserPlus} label="Total Registrations" value={(stats?.total_users ?? 0).toLocaleString()} />
+                <StatCard icon={Users} label="Daily Active Users" value={(stats?.dau ?? 0).toLocaleString()} hint="signed in within 24h" />
+                <StatCard icon={UserCheck} label="Monthly Active Users" value={(stats?.mau ?? 0).toLocaleString()} hint="signed in within 30d" />
               </div>
             </section>
 
@@ -114,12 +114,12 @@ export function Dashboard() {
                 Subscription & Revenue
               </h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <StatCard icon={BadgeDollarSign} label="Active Subscribers" value={stats.active_subscribers.toLocaleString()} />
-                <StatCard icon={CalendarClock} label="Active Trial Users" value={stats.active_trial_users.toLocaleString()} />
+                <StatCard icon={BadgeDollarSign} label="Active Subscribers" value={(stats?.active_subscribers ?? 0).toLocaleString()} />
+                <StatCard icon={CalendarClock} label="Active Trial Users" value={(stats?.trial_users ?? 0).toLocaleString()} />
                 <StatCard
                   icon={Gauge}
                   label="Estimated MRR"
-                  value={currencyFormatter.format(stats.estimated_mrr)}
+                  value={currencyFormatter.format(stats?.mrr ?? 0)}
                   hint="based on placeholder plan prices — adjust in the SQL migration"
                 />
               </div>
@@ -133,13 +133,13 @@ export function Dashboard() {
                 <StatCard
                   icon={Activity}
                   label="Active Sessions Today"
-                  value={stats.active_sessions_today.toLocaleString()}
+                  value={(stats?.active_sessions_today ?? 0).toLocaleString()}
                   hint="completed a lesson/exam today"
                 />
                 <StatCard
                   icon={BookOpenCheck}
                   label="Avg. Lessons Completed"
-                  value={stats.avg_lessons_completed.toLocaleString()}
+                  value={(stats?.avg_lessons_completed ?? 0).toLocaleString()}
                   hint="per registered user"
                 />
               </div>
