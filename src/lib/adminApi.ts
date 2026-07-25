@@ -1,0 +1,41 @@
+import { supabase } from './supabase'
+
+export interface AdminUserRow {
+  id: string
+  email: string | null
+  provider: string
+  createdAt: string
+  isBanned: boolean
+  fullName: string | null
+  accessLevel: string
+  planType: string | null
+  subscriptionExpiresAt: string | null
+}
+
+async function invoke<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action, ...payload },
+  })
+
+  if (error) throw new Error(error.message)
+  if (data?.error) throw new Error(data.error)
+  return data as T
+}
+
+export function listAdminUsers() {
+  return invoke<{ users: AdminUserRow[] }>('list')
+}
+
+export function setUserBan(userId: string, banned: boolean) {
+  return invoke<{ ok: true }>('set_ban', { userId, banned })
+}
+
+export interface SubscriptionOverrideInput {
+  accessLevel: string
+  planType?: string | null
+  expiresAt?: string | null
+}
+
+export function setUserSubscription(userId: string, input: SubscriptionOverrideInput) {
+  return invoke<{ ok: true }>('set_subscription', { userId, ...input })
+}
