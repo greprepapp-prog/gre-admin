@@ -3,10 +3,7 @@ import * as XLSX from 'xlsx'
 import { AlertCircle, CheckCircle2, Upload, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-// Adjust this to whatever table your Supabase schema actually uses for
-// imported vocabulary rows — this is a sensible default name, not a
-// guaranteed match to an existing table.
-const TARGET_TABLE = 'vocabulary_imports'
+const TARGET_TABLE = 'lesson_segments'
 
 const REQUIRED_FIELDS = [
   'word',
