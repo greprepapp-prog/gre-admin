@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, Loader2, RefreshCw, Search } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { listAdminUsers, type AdminUserRow } from '../../lib/adminApi'
 import { useAuth } from '../../hooks/use-auth'
 import { getSubscriptionStatus } from './subscriptionStatus'
 import { UserDetailDrawer } from './UserDetailDrawer'
+import { DeleteUserDialog } from './DeleteUserDialog'
 
 const PROVIDER_OPTIONS = ['all', 'email', 'google', 'apple'] as const
 
@@ -19,6 +20,8 @@ export function UserManagement() {
   const [toDate, setToDate] = useState('')
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null)
 
   async function load() {
     setLoading(true)
@@ -58,10 +61,24 @@ export function UserManagement() {
   }, [users, search, provider, fromDate, toDate])
 
   const selectedUser = users.find((u) => u.id === selectedUserId) ?? null
+  const deleteTarget = users.find((u) => u.id === deleteTargetId) ?? null
 
   function handleChanged(userId: string, patch: Partial<AdminUserRow>) {
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...patch } : u)))
   }
+
+  function handleDeleted(userId: string) {
+    setUsers((prev) => prev.filter((u) => u.id !== userId))
+    if (selectedUserId === userId) setSelectedUserId(null)
+    setDeleteTargetId(null)
+    setToast({ ok: true, text: 'User deleted.' })
+  }
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   return (
     <div className="space-y-4">
@@ -140,6 +157,19 @@ export function UserManagement() {
         </div>
       )}
 
+      {toast && (
+        <div
+          className={
+            toast.ok
+              ? 'flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700'
+              : 'flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'
+          }
+        >
+          {toast.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+          {toast.text}
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-md border border-slate-200">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
@@ -174,13 +204,25 @@ export function UserManagement() {
                   </td>
                   <td className="px-3 py-2 text-slate-500">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedUserId(u.id)}
-                      className="text-sm font-medium text-slate-700 underline hover:text-slate-900"
-                    >
-                      Manage
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserId(u.id)}
+                        className="text-sm font-medium text-slate-700 underline hover:text-slate-900"
+                      >
+                        Manage
+                      </button>
+                      {u.id !== currentAdmin?.id && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTargetId(u.id)}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -203,6 +245,10 @@ export function UserManagement() {
           onClose={() => setSelectedUserId(null)}
           onChanged={handleChanged}
         />
+      )}
+
+      {deleteTarget && (
+        <DeleteUserDialog user={deleteTarget} onClose={() => setDeleteTargetId(null)} onDeleted={handleDeleted} />
       )}
     </div>
   )

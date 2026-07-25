@@ -39,3 +39,8 @@ export interface SubscriptionOverrideInput {
 export function setUserSubscription(userId: string, input: SubscriptionOverrideInput) {
   return invoke<{ ok: true }>('set_subscription', { userId, ...input })
 }
+
+export async function deleteUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_user_by_admin', { target_user_id: userId })
+  if (error) throw new Error(error.message)
+}
