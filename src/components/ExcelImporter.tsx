@@ -1,26 +1,36 @@
-import { useState, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { AlertCircle, CheckCircle2, Upload, Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Download, Loader2, Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-const TARGET_TABLE = 'lesson_segments'
+interface SheetConfig {
+  sheetName: string
+  table: string
+  label: string
+}
 
-const REQUIRED_FIELDS = [
-  'word',
-  'definition',
-  'context_sentence',
-  'timestamp_start',
-  'timestamp_end',
-] as const
+const SHEET_CONFIGS: SheetConfig[] = [
+  { sheetName: 'Clips', table: 'lesson_segments', label: 'Clips' },
+  { sheetName: 'Questions', table: 'lesson_questions', label: 'Questions' },
+  { sheetName: 'MatchPairs', table: 'lesson_match_pairs', label: 'Match Pairs' },
+  { sheetName: 'Typing', table: 'lesson_typing_prompts', label: 'Typing' },
+]
 
-type RequiredField = (typeof REQUIRED_FIELDS)[number]
-type RowData = Record<RequiredField, string>
+const SAMPLE_TEMPLATE_URL = '/lesson_001_005_content.xlsx'
 
 interface ParsedRow {
   rowNumber: number
-  data: RowData
-  missingFields: RequiredField[]
+  data: Record<string, string>
+  hasLessonId: boolean
 }
+
+interface ParsedSheet {
+  config: SheetConfig
+  columns: string[]
+  rows: ParsedRow[]
+}
+
+type SheetStatus = 'pending' | 'importing' | 'success' | 'error'
 
 function normalizeKey(key: string): string {
   return key.trim().toLowerCase().replace(/\s+/g, '_')
@@ -31,110 +41,155 @@ function normalizeValue(value: unknown): string {
   return String(value).trim()
 }
 
-function parseWorkbook(buffer: ArrayBuffer): ParsedRow[] {
-  const workbook = XLSX.read(buffer, { type: 'array' })
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) return []
-  const sheet = workbook.Sheets[sheetName]
+function isRealColumn(key: string): boolean {
+  return key.length > 0 && !key.startsWith('__empty')
+}
+
+function parseSheet(workbook: XLSX.WorkBook, config: SheetConfig): ParsedSheet {
+  const sheet = workbook.Sheets[config.sheetName]
   const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
 
-  return rawRows.map((raw, i) => {
-    const normalized: Record<string, string> = {}
+  const columnSet = new Set<string>()
+  const rows: ParsedRow[] = rawRows.map((raw, i) => {
+    const data: Record<string, string> = {}
     for (const [key, value] of Object.entries(raw)) {
-      normalized[normalizeKey(key)] = normalizeValue(value)
+      const normalizedKey = normalizeKey(key)
+      if (!isRealColumn(normalizedKey)) continue
+      data[normalizedKey] = normalizeValue(value)
+      columnSet.add(normalizedKey)
     }
-
-    const data = REQUIRED_FIELDS.reduce((acc, field) => {
-      acc[field] = normalized[field] ?? ''
-      return acc
-    }, {} as RowData)
-
-    const missingFields = REQUIRED_FIELDS.filter((field) => !data[field])
-
-    return { rowNumber: i + 2, data, missingFields } // +2: header row + 1-indexed
+    return { rowNumber: i + 2, data, hasLessonId: Boolean(data.lesson_id) }
   })
+
+  return { config, columns: Array.from(columnSet), rows }
 }
 
 export function ExcelImporter() {
-  const [rows, setRows] = useState<ParsedRow[]>([])
+  const [sheets, setSheets] = useState<ParsedSheet[]>([])
+  const [activeSheet, setActiveSheet] = useState<string>(SHEET_CONFIGS[0].sheetName)
   const [fileName, setFileName] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<string | null>(null)
+  const [sheetStatus, setSheetStatus] = useState<Record<string, SheetStatus>>({})
+  const [sheetError, setSheetError] = useState<Record<string, string>>({})
+  const [allDone, setAllDone] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const validRows = rows.filter((r) => r.missingFields.length === 0)
-  const invalidRows = rows.filter((r) => r.missingFields.length > 0)
+  const totalValidRows = useMemo(
+    () => sheets.reduce((sum, s) => sum + s.rows.filter((r) => r.hasLessonId).length, 0),
+    [sheets],
+  )
+
+  function reset() {
+    setSheets([])
+    setFileName(null)
+    setParseError(null)
+    setSheetStatus({})
+    setSheetError({})
+    setAllDone(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
+    reset()
     setFileName(file.name)
-    setParseError(null)
-    setImportResult(null)
-    setRows([])
 
     try {
       const buffer = await file.arrayBuffer()
-      const parsed = parseWorkbook(buffer)
-      if (parsed.length === 0) {
-        setParseError('No rows found in the file.')
+      const workbook = XLSX.read(buffer, { type: 'array' })
+
+      const missingSheets = SHEET_CONFIGS.filter((c) => !workbook.SheetNames.includes(c.sheetName))
+      if (missingSheets.length > 0) {
+        setParseError(
+          `Missing required sheet(s): ${missingSheets.map((c) => c.sheetName).join(', ')}. ` +
+            `Expected sheets: ${SHEET_CONFIGS.map((c) => c.sheetName).join(', ')}.`,
+        )
         return
       }
-      setRows(parsed)
+
+      const parsedSheets = SHEET_CONFIGS.map((config) => parseSheet(workbook, config))
+      setSheets(parsedSheets)
+      setActiveSheet(parsedSheets[0].config.sheetName)
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : 'Failed to parse file.')
+      setParseError(err instanceof Error ? err.message : 'Failed to parse workbook.')
     }
   }
 
   async function handleImport() {
-    if (validRows.length === 0) return
+    if (sheets.length === 0) return
     setImporting(true)
-    setImportResult(null)
+    setAllDone(false)
 
-    const { error } = await supabase.from(TARGET_TABLE).insert(validRows.map((r) => r.data))
+    const initialStatus: Record<string, SheetStatus> = {}
+    for (const s of sheets) initialStatus[s.config.sheetName] = 'pending'
+    setSheetStatus(initialStatus)
+    setSheetError({})
+
+    let hadError = false
+
+    for (const sheet of sheets) {
+      const validRows = sheet.rows.filter((r) => r.hasLessonId)
+      setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'importing' }))
+
+      if (validRows.length === 0) {
+        setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'success' }))
+        continue
+      }
+
+      const { error } = await supabase.from(sheet.config.table).insert(validRows.map((r) => r.data))
+
+      if (error) {
+        hadError = true
+        setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'error' }))
+        setSheetError((prev) => ({ ...prev, [sheet.config.sheetName]: error.message }))
+      } else {
+        setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'success' }))
+      }
+    }
 
     setImporting(false)
-    if (error) {
-      setImportResult(`Import failed: ${error.message}`)
-    } else {
-      setImportResult(`Imported ${validRows.length} row(s) into "${TARGET_TABLE}".`)
-    }
+    setAllDone(!hadError)
   }
 
-  function reset() {
-    setRows([])
-    setFileName(null)
-    setParseError(null)
-    setImportResult(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
+  const active = sheets.find((s) => s.config.sheetName === activeSheet)
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">Import vocabulary</h2>
+        <h2 className="text-base font-semibold text-slate-900">Import lesson content</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Upload an .xlsx or .csv file with columns: word, definition, context_sentence, timestamp_start,
-          timestamp_end. Nothing is written to Supabase until you review the preview below and confirm.
+          Upload the lesson workbook (.xlsx) with sheets Clips, Questions, MatchPairs, and Typing. Nothing is
+          written to Supabase until you review the preview below and confirm.
         </p>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
           <Upload className="h-4 w-4" />
-          Choose file
+          Choose workbook
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".xlsx"
             className="hidden"
             onChange={handleFileChange}
           />
         </label>
+
+        <a
+          href={SAMPLE_TEMPLATE_URL}
+          download
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <Download className="h-4 w-4" />
+          Download Sample Template (.xlsx)
+        </a>
+
         {fileName && <span className="text-sm text-slate-500">{fileName}</span>}
-        {rows.length > 0 && (
+        {sheets.length > 0 && (
           <button
             type="button"
             onClick={reset}
@@ -152,77 +207,115 @@ export function ExcelImporter() {
         </div>
       )}
 
-      {rows.length > 0 && (
+      {sheets.length > 0 && (
         <>
-          <div className="flex gap-4 text-sm">
-            <span className="inline-flex items-center gap-1.5 text-emerald-700">
-              <CheckCircle2 className="h-4 w-4" />
-              {validRows.length} valid
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-amber-700">
-              <AlertCircle className="h-4 w-4" />
-              {invalidRows.length} missing data
-            </span>
+          <div className="flex flex-wrap gap-4 text-sm">
+            {sheets.map((s) => {
+              const validCount = s.rows.filter((r) => r.hasLessonId).length
+              const missingCount = s.rows.length - validCount
+              return (
+                <span key={s.config.sheetName} className="inline-flex items-center gap-1.5 text-slate-600">
+                  <span className="font-medium text-slate-900">{s.config.label}:</span> {s.rows.length} rows
+                  {missingCount > 0 && (
+                    <span className="text-amber-700">({missingCount} missing lesson_id)</span>
+                  )}
+                </span>
+              )
+            })}
           </div>
 
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Row</th>
-                  {REQUIRED_FIELDS.map((field) => (
-                    <th key={field} className="px-3 py-2 text-left font-medium text-slate-500">
-                      {field}
-                    </th>
-                  ))}
-                  <th className="px-3 py-2 text-left font-medium text-slate-500">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((row) => (
-                  <tr key={row.rowNumber} className={row.missingFields.length > 0 ? 'bg-amber-50' : undefined}>
-                    <td className="px-3 py-2 text-slate-400">{row.rowNumber}</td>
-                    {REQUIRED_FIELDS.map((field) => (
-                      <td
-                        key={field}
-                        className={
-                          row.missingFields.includes(field)
-                            ? 'px-3 py-2 italic text-amber-600'
-                            : 'px-3 py-2 text-slate-700'
-                        }
-                      >
-                        {row.data[field] || '(empty)'}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2">
-                      {row.missingFields.length === 0 ? (
-                        <span className="inline-flex items-center gap-1 text-emerald-700">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Valid
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-amber-700">
-                          <AlertCircle className="h-3.5 w-3.5" />
-                          Missing: {row.missingFields.join(', ')}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border-b border-slate-200">
+            <nav className="-mb-px flex gap-4">
+              {sheets.map((s) => (
+                <button
+                  key={s.config.sheetName}
+                  type="button"
+                  onClick={() => setActiveSheet(s.config.sheetName)}
+                  className={
+                    activeSheet === s.config.sheetName
+                      ? 'border-b-2 border-slate-900 px-1 py-2 text-sm font-medium text-slate-900'
+                      : 'border-b-2 border-transparent px-1 py-2 text-sm font-medium text-slate-500 hover:text-slate-700'
+                  }
+                >
+                  {s.config.label}
+                  {sheetStatus[s.config.sheetName] === 'importing' && (
+                    <Loader2 className="ml-1.5 inline h-3.5 w-3.5 animate-spin" />
+                  )}
+                  {sheetStatus[s.config.sheetName] === 'success' && (
+                    <CheckCircle2 className="ml-1.5 inline h-3.5 w-3.5 text-emerald-600" />
+                  )}
+                  {sheetStatus[s.config.sheetName] === 'error' && (
+                    <AlertCircle className="ml-1.5 inline h-3.5 w-3.5 text-red-600" />
+                  )}
+                </button>
+              ))}
+            </nav>
           </div>
+
+          {active && sheetError[active.config.sheetName] && (
+            <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              Import failed for {active.config.label} → {active.config.table}: {sheetError[active.config.sheetName]}
+            </div>
+          )}
+
+          {active && (
+            <div className="overflow-x-auto rounded-md border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Row</th>
+                    {active.columns.map((col) => (
+                      <th key={col} className="px-3 py-2 text-left font-medium text-slate-500">
+                        {col}
+                      </th>
+                    ))}
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {active.rows.map((row) => (
+                    <tr key={row.rowNumber} className={!row.hasLessonId ? 'bg-amber-50' : undefined}>
+                      <td className="px-3 py-2 text-slate-400">{row.rowNumber}</td>
+                      {active.columns.map((col) => (
+                        <td key={col} className="px-3 py-2 text-slate-700">
+                          {row.data[col] || '(empty)'}
+                        </td>
+                      ))}
+                      <td className="px-3 py-2">
+                        {row.hasLessonId ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Valid
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-700">
+                            <AlertCircle className="h-3.5 w-3.5" /> Missing lesson_id
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <button
             type="button"
             onClick={handleImport}
-            disabled={validRows.length === 0 || importing}
+            disabled={totalValidRows === 0 || importing}
             className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {importing && <Loader2 className="h-4 w-4 animate-spin" />}
-            {importing ? 'Importing…' : `Import ${validRows.length} valid row(s)`}
+            {importing ? 'Importing…' : `Import ${totalValidRows} valid row(s) across ${sheets.length} sheets`}
           </button>
 
-          {importResult && <p className="text-sm text-slate-600">{importResult}</p>}
+          {allDone && (
+            <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              All sheets imported successfully.
+            </div>
+          )}
         </>
       )}
     </div>
