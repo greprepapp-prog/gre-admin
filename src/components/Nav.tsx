@@ -2,7 +2,7 @@ import { LayoutDashboard, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/use-auth'
 
-export type Tab = 'dashboard' | 'importer' | 'users'
+export type Tab = 'dashboard' | 'importer' | 'users' | 'support'
 
 interface Props {
   active: Tab
@@ -13,6 +13,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'importer', label: 'Content Importer' },
   { id: 'users', label: 'User Management' },
+  { id: 'support', label: 'Support Inbox' },
 ]
 
 export function Nav({ active, onChange }: Props) {
@@ -20,7 +21,7 @@ export function Nav({ active, onChange }: Props) {
 
   return (
     <header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
           <LayoutDashboard className="h-5 w-5 text-slate-500" />
           <h1 className="text-lg font-semibold">GRE Admin</h1>
