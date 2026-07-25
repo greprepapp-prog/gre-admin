@@ -5,10 +5,11 @@ import { supabase } from '../lib/supabase'
 
 interface SheetConfig {
   sheetName: string
-  table: string
   label: string
-  /** Transforms a parsed (raw-header) row into the exact columns the target table expects. */
-  mapRow?: (row: Record<string, string>) => Record<string, string>
+  /** What this sheet writes to, shown in status/error messages. */
+  targetDescription: string
+  /** Performs whatever inserts this sheet needs. Returns an error message, or null on success. */
+  importRows: (rows: ParsedRow[]) => Promise<string | null>
 }
 
 // The Clips sheet's raw headers (clip_no, video_path, Vocab, Explanation,
@@ -33,11 +34,129 @@ function mapClipToLessonSegment(row: Record<string, string>): Record<string, str
   }
 }
 
+async function importClips(rows: ParsedRow[]): Promise<string | null> {
+  const payload = rows.map((r) => mapClipToLessonSegment(r.data))
+  const { error } = await supabase.from('lesson_segments').insert(payload)
+  return error ? error.message : null
+}
+
+// Questions sheet: option_1_text..option_4_text + correct_option don't exist
+// as columns on lesson_questions — they belong on child question_options
+// rows, which need the parent question's generated id. So each row becomes
+// one lesson_questions insert (getting back its id), then up to 4
+// question_options inserts referencing that id.
+async function importQuestions(rows: ParsedRow[]): Promise<string | null> {
+  for (const row of rows) {
+    const d = row.data
+    const { data: inserted, error: questionError } = await supabase
+      .from('lesson_questions')
+      .insert({
+        lesson_id: d.lesson_id ?? '',
+        order_index: d.order_index ?? '',
+        type: d.type || 'multiple-choice',
+        prompt: d.prompt ?? '',
+        word: d.word ?? '',
+      })
+      .select('id')
+      .single()
+
+    if (questionError || !inserted) {
+      return `Row ${row.rowNumber}: ${questionError?.message ?? 'failed to create question'}`
+    }
+
+    const correctIndex = Number(d.correct_option) || 0
+    const options = [1, 2, 3, 4]
+      .map((n) => ({
+        question_id: inserted.id as string,
+        text: d[`option_${n}_text`] ?? '',
+        is_correct: n === correctIndex,
+        order_index: n,
+      }))
+      .filter((o) => o.text)
+
+    if (options.length > 0) {
+      const { error: optionsError } = await supabase.from('question_options').insert(options)
+      if (optionsError) return `Row ${row.rowNumber} options: ${optionsError.message}`
+    }
+  }
+  return null
+}
+
+// MatchPairs sheet: each row is one word/meaning pair, not a full question,
+// but question_match_pairs still needs a parent lesson_questions row (a
+// question_id FK). The sheet doesn't group pairs into questions itself, so
+// this creates one type='match' question per distinct lesson_id and attaches
+// all of that lesson's pairs to it.
+async function importMatchPairs(rows: ParsedRow[]): Promise<string | null> {
+  const byLesson = new Map<string, ParsedRow[]>()
+  for (const row of rows) {
+    const lessonId = row.data.lesson_id
+    const group = byLesson.get(lessonId) ?? []
+    group.push(row)
+    byLesson.set(lessonId, group)
+  }
+
+  for (const [lessonId, group] of byLesson) {
+    const { data: inserted, error: questionError } = await supabase
+      .from('lesson_questions')
+      .insert({
+        lesson_id: lessonId,
+        type: 'match',
+        prompt: group[0].data.prompt || 'Match the words to their meanings',
+      })
+      .select('id')
+      .single()
+
+    if (questionError || !inserted) {
+      return `Lesson ${lessonId}: ${questionError?.message ?? 'failed to create match question'}`
+    }
+
+    const pairs = group.map((row) => ({
+      question_id: inserted.id as string,
+      en: row.data.en ?? '',
+      mn: row.data.mn ?? '',
+      order_index: row.data.pair_order ?? '',
+    }))
+
+    const { error: pairsError } = await supabase.from('question_match_pairs').insert(pairs)
+    if (pairsError) return `Lesson ${lessonId} pairs: ${pairsError.message}`
+  }
+  return null
+}
+
+// Typing sheet maps directly onto lesson_questions with type='typing' —
+// the typed answer is graded against `word`, no child rows needed.
+function mapTypingToQuestion(row: Record<string, string>): Record<string, string> {
+  return {
+    lesson_id: row.lesson_id ?? '',
+    order_index: row.order_index ?? '',
+    type: 'typing',
+    prompt: row.prompt ?? '',
+    word: row.answer ?? '',
+  }
+}
+
+async function importTyping(rows: ParsedRow[]): Promise<string | null> {
+  const payload = rows.map((r) => mapTypingToQuestion(r.data))
+  const { error } = await supabase.from('lesson_questions').insert(payload)
+  return error ? error.message : null
+}
+
 const SHEET_CONFIGS: SheetConfig[] = [
-  { sheetName: 'Clips', table: 'lesson_segments', label: 'Clips', mapRow: mapClipToLessonSegment },
-  { sheetName: 'Questions', table: 'lesson_questions', label: 'Questions' },
-  { sheetName: 'MatchPairs', table: 'lesson_match_pairs', label: 'Match Pairs' },
-  { sheetName: 'Typing', table: 'lesson_typing_prompts', label: 'Typing' },
+  { sheetName: 'Clips', label: 'Clips', targetDescription: 'lesson_segments', importRows: importClips },
+  {
+    sheetName: 'Questions',
+    label: 'Questions',
+    targetDescription: 'lesson_questions + question_options',
+    importRows: importQuestions,
+  },
+  {
+    sheetName: 'MatchPairs',
+    label: 'Match Pairs',
+    targetDescription: 'lesson_questions + question_match_pairs',
+    importRows: importMatchPairs,
+  },
+  { sheetName: 'Typing', label: 'Typing', targetDescription: 'lesson_questions', importRows: importTyping },
 ]
 
 const SAMPLE_TEMPLATE_URL = '/lesson_001_005_content.xlsx'
@@ -163,16 +282,12 @@ export function ExcelImporter() {
         continue
       }
 
-      const payload = sheet.config.mapRow
-        ? validRows.map((r) => sheet.config.mapRow!(r.data))
-        : validRows.map((r) => r.data)
+      const errorMessage = await sheet.config.importRows(validRows)
 
-      const { error } = await supabase.from(sheet.config.table).insert(payload)
-
-      if (error) {
+      if (errorMessage) {
         hadError = true
         setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'error' }))
-        setSheetError((prev) => ({ ...prev, [sheet.config.sheetName]: error.message }))
+        setSheetError((prev) => ({ ...prev, [sheet.config.sheetName]: errorMessage }))
       } else {
         setSheetStatus((prev) => ({ ...prev, [sheet.config.sheetName]: 'success' }))
       }
@@ -283,7 +398,8 @@ export function ExcelImporter() {
           {active && sheetError[active.config.sheetName] && (
             <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              Import failed for {active.config.label} → {active.config.table}: {sheetError[active.config.sheetName]}
+              Import failed for {active.config.label} → {active.config.targetDescription}:{' '}
+              {sheetError[active.config.sheetName]}
             </div>
           )}
 
