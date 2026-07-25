@@ -88,6 +88,10 @@ Deno.serve(async (req) => {
   const action = body.action
 
   try {
+    if (action === 'ping') {
+      return json({ ok: true, pong: Date.now() }, 200, origin)
+    }
+
     if (action === 'list') {
       return json(await listUsers(admin), 200, origin)
     }
