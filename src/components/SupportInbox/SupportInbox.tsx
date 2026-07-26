@@ -141,6 +141,8 @@ export function SupportInbox() {
             selectedTicketId={selectedTicketId}
             onSelect={setSelectedTicketId}
             onNewTicket={() => setShowNewTicketModal(true)}
+            onRefresh={loadTickets}
+            refreshing={ticketsLoading}
           />
 
           <TicketThread

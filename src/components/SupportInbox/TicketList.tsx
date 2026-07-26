@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Loader2, Plus, RefreshCw, Search } from 'lucide-react'
 import type { SupportTicket, TicketStatus } from '../../lib/supportApi'
 import { PRIORITY_STYLES, STATUS_STYLES, capitalize } from './badges'
 
@@ -11,9 +11,19 @@ interface Props {
   selectedTicketId: string | null
   onSelect: (id: string) => void
   onNewTicket: () => void
+  onRefresh: () => void
+  refreshing: boolean
 }
 
-export function TicketList({ tickets, emailByUserId, selectedTicketId, onSelect, onNewTicket }: Props) {
+export function TicketList({
+  tickets,
+  emailByUserId,
+  selectedTicketId,
+  onSelect,
+  onNewTicket,
+  onRefresh,
+  refreshing,
+}: Props) {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all')
   const [search, setSearch] = useState('')
 
@@ -32,14 +42,25 @@ export function TicketList({ tickets, emailByUserId, selectedTicketId, onSelect,
       <div className="space-y-2 border-b border-slate-200 p-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900">Tickets</h3>
-          <button
-            type="button"
-            onClick={onNewTicket}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              title="Refresh tickets"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={onNewTicket}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New
+            </button>
+          </div>
         </div>
 
         <div className="relative">
