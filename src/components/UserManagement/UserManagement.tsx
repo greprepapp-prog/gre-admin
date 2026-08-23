@@ -8,6 +8,23 @@ import { DeleteUserDialog } from './DeleteUserDialog'
 
 const PROVIDER_OPTIONS = ['all', 'email', 'google', 'apple'] as const
 
+function fmtDate(s: string | null) {
+  return s ? new Date(s).toLocaleDateString() : '—'
+}
+
+function platformLabel(p: string | null) {
+  switch (p) {
+    case 'ios':
+      return 'iOS'
+    case 'android':
+      return 'Android'
+    case 'web':
+      return 'Web'
+    default:
+      return '—'
+  }
+}
+
 export function UserManagement() {
   const { user: currentAdmin } = useAuth()
   const [users, setUsers] = useState<AdminUserRow[]>([])
@@ -174,11 +191,13 @@ export function UserManagement() {
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">User ID</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Email</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Auth Provider</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Subscription</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Created At</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">USER</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">PLATFORM</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">APP OPENED</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">LAST LOGIN</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">LAST PRACTICED</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">REFERRAL</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">SUBSCRIPTION</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">Actions</th>
             </tr>
           </thead>
@@ -187,11 +206,15 @@ export function UserManagement() {
               const status = getSubscriptionStatus(u)
               return (
                 <tr key={u.id} className={u.isBanned ? 'bg-red-50/40' : undefined}>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-500" title={u.id}>
-                    {u.id.slice(0, 8)}…
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-slate-800">{u.fullName || '(no name)'}</div>
+                    <div className="text-xs text-slate-500">{u.email ?? '(no email)'}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-700">{u.email ?? '(no email)'}</td>
-                  <td className="px-3 py-2 text-slate-600 capitalize">{u.provider}</td>
+                  <td className="px-3 py-2 text-slate-600">{platformLabel(u.platform)}</td>
+                  <td className="px-3 py-2 text-slate-600">{u.appOpenCount}</td>
+                  <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastSignInAt)}</td>
+                  <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastPracticedAt)}</td>
+                  <td className="px-3 py-2 text-slate-600">{u.referral || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
                       {status.label}
@@ -202,7 +225,6 @@ export function UserManagement() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-3">
                       <button
@@ -229,7 +251,7 @@ export function UserManagement() {
             })}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-slate-400">
                   No users match the current filters.
                 </td>
               </tr>

@@ -5,8 +5,13 @@ export interface AdminUserRow {
   email: string | null
   provider: string
   createdAt: string
+  lastSignInAt: string | null
   isBanned: boolean
   fullName: string | null
+  platform: string | null
+  appOpenCount: number
+  lastPracticedAt: string | null
+  referral: string | null
   accessLevel: string
   planType: string | null
   subscriptionExpiresAt: string | null
