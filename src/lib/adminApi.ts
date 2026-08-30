@@ -11,7 +11,6 @@ export interface AdminUserRow {
   platform: string | null
   appOpenCount: number
   lastPracticedAt: string | null
-  referral: string | null
   accessLevel: string
   planType: string | null
   subscriptionExpiresAt: string | null

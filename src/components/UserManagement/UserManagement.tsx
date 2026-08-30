@@ -12,6 +12,14 @@ function fmtDate(s: string | null) {
   return s ? new Date(s).toLocaleDateString() : '—'
 }
 
+function fmtDateMDY(s: string | null) {
+  if (!s) return '—'
+  const d = new Date(s)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}/${dd}/${d.getFullYear()}`
+}
+
 function platformLabel(p: string | null) {
   switch (p) {
     case 'ios':
@@ -194,9 +202,9 @@ export function UserManagement() {
               <th className="px-3 py-2 text-left font-medium text-slate-500">USER</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">PLATFORM</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">APP OPENED</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">CREATED</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">LAST LOGIN</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">LAST PRACTICED</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">REFERRAL</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">SUBSCRIPTION</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">Actions</th>
             </tr>
@@ -212,9 +220,9 @@ export function UserManagement() {
                   </td>
                   <td className="px-3 py-2 text-slate-600">{platformLabel(u.platform)}</td>
                   <td className="px-3 py-2 text-slate-600">{u.appOpenCount}</td>
+                  <td className="px-3 py-2 text-slate-500">{fmtDateMDY(u.createdAt)}</td>
                   <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastSignInAt)}</td>
                   <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastPracticedAt)}</td>
-                  <td className="px-3 py-2 text-slate-600">{u.referral || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
                       {status.label}

@@ -142,7 +142,7 @@ async function listUsers(admin: any) {
   const [{ data: profiles }, { data: subs }] = await Promise.all([
     admin
       .from('profiles')
-      .select('id, full_name, account_tier, created_at, platform, app_open_count, last_practiced_at, referral')
+      .select('id, full_name, account_tier, created_at, platform, app_open_count, last_practiced_at')
       .in('id', ids),
     admin
       .from('user_subscriptions')
@@ -172,7 +172,6 @@ async function listUsers(admin: any) {
       platform: profile?.platform ?? null,
       appOpenCount: profile?.app_open_count ?? 0,
       lastPracticedAt: profile?.last_practiced_at ?? null,
-      referral: profile?.referral ?? null,
       accessLevel: sub?.access_level ?? 'free',
       planType: sub?.plan_type ?? null,
       subscriptionExpiresAt: sub?.expires_at ?? null,
