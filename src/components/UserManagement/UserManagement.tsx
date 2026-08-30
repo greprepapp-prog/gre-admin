@@ -203,8 +203,8 @@ export function UserManagement() {
               <th className="px-3 py-2 text-left font-medium text-slate-500">PLATFORM</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">APP OPENED</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">CREATED</th>
+              <th className="px-3 py-2 text-left font-medium text-slate-500">LAST LOGIN</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">LAST STUDIED</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">LAST PRACTICED</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">SUBSCRIPTION</th>
               <th className="px-3 py-2 text-left font-medium text-slate-500">Actions</th>
             </tr>
@@ -221,8 +221,8 @@ export function UserManagement() {
                   <td className="px-3 py-2 text-slate-600">{platformLabel(u.platform)}</td>
                   <td className="px-3 py-2 text-slate-600">{u.appOpenCount}</td>
                   <td className="px-3 py-2 text-slate-500">{fmtDateMDY(u.createdAt)}</td>
+                  <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastSignInAt)}</td>
                   <td className="px-3 py-2 text-slate-500">{fmtDateMDY(u.lastStudiedAt)}</td>
-                  <td className="px-3 py-2 text-slate-500">{fmtDate(u.lastPracticedAt)}</td>
                   <td className="px-3 py-2">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
                       {status.label}
