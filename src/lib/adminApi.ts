@@ -6,6 +6,7 @@ export interface AdminUserRow {
   provider: string
   createdAt: string
   lastSignInAt: string | null
+  lastStudiedAt: string | null
   isBanned: boolean
   fullName: string | null
   platform: string | null

@@ -139,7 +139,7 @@ async function listUsers(admin: any) {
   const ids = Array.from(usersById.keys())
   if (ids.length === 0) return { users: [] }
 
-  const [{ data: profiles }, { data: subs }] = await Promise.all([
+  const [{ data: profiles }, { data: subs }, { data: studied }] = await Promise.all([
     admin
       .from('profiles')
       .select('id, full_name, account_tier, created_at, platform, app_open_count, last_practiced_at')
@@ -148,10 +148,13 @@ async function listUsers(admin: any) {
       .from('user_subscriptions')
       .select('user_id, access_level, plan_type, expires_at, updated_at')
       .in('user_id', ids),
+    // Last study engagement = latest lesson activity OR word saved during video immersion.
+    admin.rpc('admin_last_studied'),
   ])
 
   const profileById = new Map((profiles ?? []).map((p: any) => [p.id, p]))
   const subByUserId = new Map((subs ?? []).map((s: any) => [s.user_id, s]))
+  const studiedByUserId = new Map((studied ?? []).map((r: any) => [r.user_id, r.last_studied]))
 
   const users = ids.map((id) => {
     const u = usersById.get(id)
@@ -167,6 +170,7 @@ async function listUsers(admin: any) {
       provider,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at ?? null,
+      lastStudiedAt: studiedByUserId.get(id) ?? null,
       isBanned,
       fullName: profile?.full_name ?? null,
       platform: profile?.platform ?? null,
