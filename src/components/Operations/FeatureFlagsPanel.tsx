@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   deleteFeatureFlag,
   listFeatureFlags,
@@ -12,11 +12,52 @@ interface Draft {
   jsonText: string
   jsonError: string | null
   saving: boolean
+  expanded: boolean
   message: { ok: boolean; text: string } | null
 }
 
 function toDraft(flag: FeatureFlag): Draft {
-  return { flag, jsonText: JSON.stringify(flag.variant_config, null, 2), jsonError: null, saving: false, message: null }
+  return { flag, jsonText: JSON.stringify(flag.variant_config, null, 2), jsonError: null, saving: false, expanded: false, message: null }
+}
+
+/** Turns a flag_key into a readable fallback label, e.g. enforce_lesson_passing → "Enforce Lesson Passing". */
+function humanize(key: string): string {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Splits the description into a bold title + muted subtext at the first
+ * sentence boundary, so "Enforce Lesson Passing (Sequential Progression). ON:
+ * … OFF: …" renders as a heading with the ON/OFF explanation beneath it.
+ * Falls back to a humanized flag_key when there's no description.
+ */
+function labelAndSubtext(flag: FeatureFlag): { label: string; subtext: string } {
+  const d = (flag.description ?? '').trim()
+  if (!d) return { label: humanize(flag.flag_key), subtext: '' }
+  const m = d.match(/^(.*?[.!?])\s+(.*)$/s)
+  if (m) return { label: m[1].replace(/[.!?]\s*$/, ''), subtext: m[2].trim() }
+  return { label: d, subtext: '' }
+}
+
+function Switch({ on, disabled, onChange }: { on: boolean; disabled?: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+        on ? 'bg-blue-600' : 'bg-slate-300'
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+          on ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  )
 }
 
 export function FeatureFlagsPanel() {
@@ -133,11 +174,103 @@ export function FeatureFlagsPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900">Feature Flags & Paywall A/B Testing</h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Toggle flags in real time and edit their JSON variant config directly. Readable by the app for all users.
-        </p>
+        <h3 className="text-sm font-semibold text-slate-900">Feature Flags</h3>
+        <p className="mt-1 text-xs text-slate-500">Toggle app features on or off in real time. Readable by the app for all users.</p>
       </div>
+
+      {error && (
+        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-100 rounded-md border border-slate-200 bg-white">
+          {drafts.map((draft) => {
+            const { label, subtext } = labelAndSubtext(draft.flag)
+            return (
+              <div key={draft.flag.id} className="px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">{label}</p>
+                    {subtext && <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{subtext}</p>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {draft.saving && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                    <Switch on={draft.flag.is_enabled} disabled={draft.saving} onChange={() => handleToggle(draft)} />
+                  </div>
+                </div>
+
+                <div className="mt-1 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => updateDraft(draft.flag.id, { expanded: !draft.expanded })}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-slate-600"
+                  >
+                    <ChevronDown className={`h-3 w-3 transition-transform ${draft.expanded ? 'rotate-180' : ''}`} />
+                    {draft.expanded ? 'Hide advanced' : 'Advanced'}
+                  </button>
+                  <span className="font-mono text-[11px] text-slate-400">{draft.flag.flag_key}</span>
+                  {draft.message && (
+                    <span className={draft.message.ok ? 'inline-flex items-center gap-1 text-[11px] text-emerald-700' : 'inline-flex items-center gap-1 text-[11px] text-red-600'}>
+                      {draft.message.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                      {draft.message.text}
+                    </span>
+                  )}
+                </div>
+
+                {draft.expanded && (
+                  <div className="mt-3 space-y-2 rounded-md bg-slate-50 p-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500">Description (label. subtext)</label>
+                      <input
+                        value={draft.flag.description ?? ''}
+                        onChange={(e) => updateDraft(draft.flag.id, { flag: { ...draft.flag, description: e.target.value } })}
+                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500">variant_config (JSON)</label>
+                      <textarea
+                        value={draft.jsonText}
+                        onChange={(e) => updateDraft(draft.flag.id, { jsonText: e.target.value, jsonError: null })}
+                        rows={3}
+                        className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs"
+                      />
+                      {draft.jsonError && <p className="mt-1 text-xs text-red-600">{draft.jsonError}</p>}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => handleSave(draft)}
+                        disabled={draft.saving}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {draft.saving && <Loader2 className="h-3 w-3 animate-spin" />}
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(draft.flag.id)}
+                        className="inline-flex items-center gap-1 rounded-md p-1 text-xs text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete flag
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {drafts.length === 0 && <p className="px-4 py-6 text-center text-xs text-slate-400">No feature flags yet.</p>}
+        </div>
+      )}
 
       <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-2 rounded-md border border-slate-200 bg-white p-3">
         <div>
@@ -167,92 +300,6 @@ export function FeatureFlagsPanel() {
         </button>
         {createError && <p className="w-full text-xs text-red-600">{createError}</p>}
       </form>
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {drafts.map((draft) => (
-            <div key={draft.flag.id} className="rounded-md border border-slate-200 bg-white p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono text-sm font-semibold text-slate-900">{draft.flag.flag_key}</p>
-                  <input
-                    value={draft.flag.description ?? ''}
-                    onChange={(e) => updateDraft(draft.flag.id, { flag: { ...draft.flag, description: e.target.value } })}
-                    placeholder="Description"
-                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600"
-                  />
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Updated {new Date(draft.flag.updated_at).toLocaleString()}
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleToggle(draft)}
-                    disabled={draft.saving}
-                    className={
-                      draft.flag.is_enabled
-                        ? 'rounded-full bg-emerald-600 px-3 py-1 text-xs font-medium text-white'
-                        : 'rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-600'
-                    }
-                  >
-                    {draft.flag.is_enabled ? 'Enabled' : 'Disabled'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(draft.flag.id)}
-                    className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-2">
-                <label className="block text-xs font-medium text-slate-500">variant_config (JSON)</label>
-                <textarea
-                  value={draft.jsonText}
-                  onChange={(e) => updateDraft(draft.flag.id, { jsonText: e.target.value, jsonError: null })}
-                  rows={3}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs"
-                />
-                {draft.jsonError && <p className="mt-1 text-xs text-red-600">{draft.jsonError}</p>}
-              </div>
-
-              <div className="mt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSave(draft)}
-                  disabled={draft.saving}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {draft.saving && <Loader2 className="h-3 w-3 animate-spin" />}
-                  Save
-                </button>
-                {draft.message && (
-                  <span className={draft.message.ok ? 'inline-flex items-center gap-1 text-xs text-emerald-700' : 'inline-flex items-center gap-1 text-xs text-red-600'}>
-                    {draft.message.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                    {draft.message.text}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-          {drafts.length === 0 && <p className="text-center text-xs text-slate-400">No feature flags yet.</p>}
-        </div>
-      )}
     </div>
   )
 }
