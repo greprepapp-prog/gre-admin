@@ -118,6 +118,15 @@ Deno.serve(async (req) => {
       return json({ ok: true }, 200, origin)
     }
 
+    if (action === 'set_password') {
+      const userId = String(body.userId ?? '')
+      const password = String(body.password ?? '')
+      if (!userId) return json({ error: 'userId is required' }, 400, origin)
+      if (password.length < 6) return json({ error: 'Password must be at least 6 characters' }, 400, origin)
+      await setPassword(admin, caller.id, userId, password)
+      return json({ ok: true }, 200, origin)
+    }
+
     return json({ error: `Unknown action: ${String(action)}` }, 400, origin)
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'Internal error' }, 500, origin)
@@ -226,5 +235,19 @@ async function setSubscription(admin: any, adminId: string, userId: string, inpu
     target_user_id: userId,
     action: 'override_subscription',
     details: input,
+  })
+}
+
+// deno-lint-ignore no-explicit-any
+async function setPassword(admin: any, adminId: string, userId: string, password: string) {
+  const { error } = await admin.auth.admin.updateUserById(userId, { password })
+  if (error) throw new Error(error.message)
+
+  // Never log the password itself — only that a reset happened.
+  await admin.from('admin_audit_logs').insert({
+    admin_id: adminId,
+    target_user_id: userId,
+    action: 'set_password',
+    details: {},
   })
 }

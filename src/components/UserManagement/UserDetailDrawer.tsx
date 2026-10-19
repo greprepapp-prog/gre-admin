@@ -4,6 +4,7 @@ import type { AdminUserRow } from '../../lib/adminApi'
 import { setUserBan, setUserSubscription } from '../../lib/adminApi'
 import { fetchAuditLogForUser, logAdminAction, type AuditLogEntry } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
+import { ChangePasswordModal } from './ChangePasswordModal'
 
 const ACCESS_LEVELS = ['free', 'trial', 'active', 'lifetime'] as const
 
@@ -12,9 +13,11 @@ interface Props {
   adminId: string
   onClose: () => void
   onChanged: (userId: string, patch: Partial<AdminUserRow>) => void
+  onToast: (text: string) => void
 }
 
-export function UserDetailDrawer({ user, adminId, onClose, onChanged }: Props) {
+export function UserDetailDrawer({ user, adminId, onClose, onChanged, onToast }: Props) {
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [accessLevel, setAccessLevel] = useState(user.accessLevel || 'free')
   const [planType, setPlanType] = useState(user.planType ?? '')
   const [expiresAt, setExpiresAt] = useState(user.subscriptionExpiresAt?.slice(0, 10) ?? '')
@@ -193,6 +196,17 @@ export function UserDetailDrawer({ user, adminId, onClose, onChanged }: Props) {
               Send password reset email
             </button>
             {resetMessage && <StatusMessage ok={resetMessage.ok} text={resetMessage.text} />}
+
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-xs text-slate-500">Or set a new password directly (no email needed).</p>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(true)}
+                className="mt-2 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Нууц үг солих
+              </button>
+            </div>
           </section>
 
           <section className="space-y-3 border-t border-slate-100 pt-5">
@@ -238,6 +252,15 @@ export function UserDetailDrawer({ user, adminId, onClose, onChanged }: Props) {
           </section>
         </div>
       </div>
+
+      {showPasswordModal && (
+        <ChangePasswordModal
+          userId={user.id}
+          email={user.email}
+          onClose={() => setShowPasswordModal(false)}
+          onSuccess={() => onToast('Нууц үг амжилттай солигдлоо')}
+        />
+      )}
     </div>
   )
 }

@@ -274,6 +274,7 @@ export function UserManagement() {
           adminId={currentAdmin.id}
           onClose={() => setSelectedUserId(null)}
           onChanged={handleChanged}
+          onToast={(text) => setToast({ ok: true, text })}
         />
       )}
 

@@ -45,6 +45,10 @@ export function setUserSubscription(userId: string, input: SubscriptionOverrideI
   return invoke<{ ok: true }>('set_subscription', { userId, ...input })
 }
 
+export function setUserPassword(userId: string, password: string) {
+  return invoke<{ ok: true }>('set_password', { userId, password })
+}
+
 export async function deleteUser(userId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_user_by_admin', { target_user_id: userId })
   if (error) throw new Error(error.message)
