@@ -14,6 +14,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const ALLOWED_ORIGINS = new Set([
   'https://neej.gre-movie-vocab.site',
+  'https://gre-admin-54e.pages.dev',
   'http://localhost:5173',
 ])
 
